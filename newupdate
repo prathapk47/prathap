@@ -48,3 +48,13 @@ foreach ($line in [System.IO.File]::ReadLines("$inpath")) {
 if ($startvalue -gt 0) {
     exportoutput
 }
+
+Select-Object:
+Line |
+   4 |            Select-Object OperationID, SubscriptionID, ResourceID, Call …
+     |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | A positional parameter cannot be found that accepts argument 'OperationName'.
+
+
+
+
