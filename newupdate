@@ -18,14 +18,14 @@ $outpath = Read-Host "Enter the path location where CSV file need to be stored"
 foreach ($line in [System.IO.File]::ReadLines("$inpath")) {
     Select-AzSubscription -Subscription $line
     $al = Get-AzActivityLog -StartTime (Get-Date).AddDays(-1) | 
-          Select-Object OperationID, SubscriptionID, ResourceID, Caller, EventTimestamp, -ExpandProperty OperationName | 
           Where-Object { 
               ($_.LocalizedValue -match "Delete" -or $_.LocalizedValue -match "Remove") -and 
               ($_.ResourceID -match "Microsoft.Web/sites" -or 
                $_.ResourceID -match "Microsoft.Logic/workflows" -or 
                $_.ResourceID -match "Microsoft.Web/sites/functions" -or 
                $_.ResourceID -match "Microsoft.Sql/servers/databases")
-          }
+          } | 
+          Select-Object OperationID, SubscriptionID, ResourceID, Caller, EventTimestamp, @{Name="OperationName";Expression={$_.OperationName.LocalizedValue}}
 
     # Filter by tags
     $filteredAl = @()
@@ -49,11 +49,8 @@ if ($startvalue -gt 0) {
     exportoutput
 }
 
-Select-Object:
-Line |
-   4 |            Select-Object OperationID, SubscriptionID, ResourceID, Call …
-     |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     | A positional parameter cannot be found that accepts argument 'OperationName'.
+
+
 
 
 
