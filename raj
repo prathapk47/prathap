@@ -1,0 +1,90 @@
+# DESCRIPTION
+#LIST OF AZURE MANAGED resources_BY_CAPMSP = YES
+#Disable-AzureRmAlias -Module Az.Accounts -Scope CurrentUser
+Install-Module -Name Az.ResourceGraph -Scope CurrentUser
+function AzureConnection {
+    Process {
+        try {
+            # RECOVER ACCOUNT FOR AUTHENTICATION IN AZURE     
+            $CONNECTION_AZURE = Connect-AzAccount -Identity -ErrorAction Stop
+            Write-Output "CONNEXION AZURE [OK]"
+        } 
+        catch {
+            Write-Output "[ERROR] CONNEXION AZURE"
+            Write-Error -Message $_.Exception
+            throw $_.Exception
+        }
+    }
+}
+
+#Connect to Azure Account
+AzureConnection
+
+#VARIABLES
+#$SUBSCRIPTIONS = Get-AzSubscription
+$LIST_EMAILS = ''
+$VM_STATUS = New-Object System.Collections.ArrayList
+$DATE = Get-Date
+$CREDOFFICE365 = Get-AutomationPSCredential -Name 'OfficeMail' 
+$Cred = Get-AutomationPSCredential -Name 'apikeysendgrid'
+$ATTACHMENT =".\Azure_Resources.csv"
+$TAGNAME = 'managed_by_capmsp'
+
+#Main Query
+$kqlquery = 'resources
+| where tags.managed_by_capmsp in ("yes","YES")
+| project name,type,resourceGroup,location,subscriptionId,tags.managed_by_capmsp,tags.capmsp_operating_mode,tags.capmsp_service_level, tags.avaibility,tags.owner,tags.owner_contact,tags.ownergroup,tags.client_name,tags,tags.environment,tags.kind,tags.bu,tags.application,tags.security_contact,tags.application_name,tags.bdd,tags.role,tags.is_managed'
+
+$batchSize = 1000
+$skipResult = 0 
+
+[System.Collections.Generic.List[string]]$kqlResult 
+
+while ($true) {
+
+    if ($skipResult -gt 0) {
+        $graphResult = Search-AzGraph -Query $kqlQuery   -first $batchSize -SkipToken $graphResult.SkipToken
+    } 
+    else {
+        $graphResult = Search-AzGraph -Query $kqlQuery   -first $batchSize 
+    }
+
+    $kqlResult += $graphResult.data
+
+    if ($graphResult.data.Count -lt $batchSize) {
+        break;
+    }
+    $skipResult += $skipResult + $batchSize
+}
+
+
+#Email Body
+$BODY = @"
+<h2><font color='teal'>Monthly All Azure Resources Extraction managed by CG</font></h2>
+<h3> This attachement contains a list of All Azure Resources managed_by_capmsp=YES</h3>
+"@
+
+##EXPORT RESULTS IN DIFFERENT EXCEL SHEETS
+
+ $kqlResult | Export-Excel $ATTACHMENT -WorkSheetname 'Azure_Resources_ManagedByMSP' -AutoSize -append
+
+try {     
+    Write-Output "Send MAIL"
+    Send-MailMessage `
+        -To "" `
+        -Cc "" `
+        -Subject "Azure_Resources_managedbyMSP $($DATE.ToString("dd/MM/yyyy"))"  `
+        -Body $BODY `
+        -UseSsl `
+        -Port 587 `
+        -SmtpServer 'smtp.sendgrid.net' `
+        -Attachments $ATTACHMENT `
+        -From "" `
+        -BodyAsHtml `
+        -Credential $Cred
+}
+catch {
+    Write-Output "ENVOI DE MAIL [ERROR]"
+    Write-Error -Message $_.Exception
+    throw $_.Exception
+}
