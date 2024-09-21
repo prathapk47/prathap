@@ -31,7 +31,7 @@ foreach ($line in [System.IO.File]::ReadLines("$inpath")) {
     $filteredAl = @()
     foreach ($activity in $al) {
         $resource = Get-AzResource -ResourceId $activity.ResourceID
-        if ($resource.Tags.ContainsKey("mytag") -or $resource.Tags.ContainsKey("mytag1")) {
+        if (($resource.Tags["mytag"] -eq "yes") -or ($resource.Tags["mytag1"] -eq "yes")) {
             $filteredAl += $activity
         }
     }
