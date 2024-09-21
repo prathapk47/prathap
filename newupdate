@@ -1,0 +1,50 @@
+function exportoutput {
+    $From = "your-email@example.com"
+    $To = "recipient@example.com"
+    $Cc = "cc1@example.com","cc2@example.com"
+    $Attachment = $outpath
+    $date = Get-Date -DisplayHint Date
+    $Subject = "Deleted Resources in last 24 hours ( $date )"
+    $Body = "<h4>Hi Team, Please find the attached CSV file consisting of the deleted resources from last 24 hours </h4><br><br>"
+    $Body += "This is an automated email using script"
+    $SMTP = "smtp.outlook.com"
+    Send-MailMessage -From $From -To $To -Cc $Cc -Subject $Subject -Body $Body -BodyAsHtml -SmtpServer $SMTP -UseSsl -Credential (Get-Credential) -Attachments $Attachment
+}
+
+$startvalue = 0
+$inpath = Read-Host "Enter the file path with list of subscriptions"
+$outpath = Read-Host "Enter the path location where CSV file need to be stored"
+
+foreach ($line in [System.IO.File]::ReadLines("$inpath")) {
+    Select-AzSubscription -Subscription $line
+    $al = Get-AzActivityLog -StartTime (Get-Date).AddDays(-1) | 
+          Select-Object OperationID, SubscriptionID, ResourceID, Caller, EventTimestamp, -ExpandProperty OperationName | 
+          Where-Object { 
+              ($_.LocalizedValue -match "Delete" -or $_.LocalizedValue -match "Remove") -and 
+              ($_.ResourceID -match "Microsoft.Web/sites" -or 
+               $_.ResourceID -match "Microsoft.Logic/workflows" -or 
+               $_.ResourceID -match "Microsoft.Web/sites/functions" -or 
+               $_.ResourceID -match "Microsoft.Sql/servers/databases")
+          }
+
+    # Filter by tags
+    $filteredAl = @()
+    foreach ($activity in $al) {
+        $resource = Get-AzResource -ResourceId $activity.ResourceID
+        if ($resource.Tags.ContainsKey("mytag") -or $resource.Tags.ContainsKey("mytag1")) {
+            $filteredAl += $activity
+        }
+    }
+
+    $tot = ($filteredAl).Count
+    if ($tot -eq 0) {
+        Write-Host "There are no resources deleted in the last 24 hours SOP"
+    } else {
+        $filteredAl | Export-Csv -Append -Path "$outpath" -NoTypeInformation
+    }
+    $startvalue = $startvalue + $tot
+}
+
+if ($startvalue -gt 0) {
+    exportoutput
+}
