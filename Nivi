@@ -1,0 +1,95 @@
+function exportoutput {
+    $From = "your-email@example.com"
+    $To = "recipient@example.com"
+    $Cc = "cc1@example.com","cc2@example.com"
+    $Attachment = $outpath
+    $date = Get-Date -DisplayHint Date
+    $Subject = "Deleted Resources in last 24 hours ( $date )"
+    $Body = "<h4>Hi Team, Please find the attached CSV file consisting of the deleted resources from last 24 hours </h4><br><br>"
+    $Body += "This is an automated email using script"
+    $SMTP = "smtp.outlook.com"
+    Send-MailMessage -From $From -To $To -Cc $Cc -Subject $Subject -Body $Body -BodyAsHtml -SmtpServer $SMTP -UseSsl -Credential (Get-Credential) -Attachments $Attachment
+}
+
+$startvalue = 0
+$inpath = Read-Host "Enter the file path with list of subscriptions"
+$outpath = Read-Host "Enter the path location where CSV file need to be stored"
+
+foreach ($line in [System.IO.File]::ReadLines("$inpath")) {
+    Select-AzSubscription -Subscription $line
+    $al = Get-AzActivityLog -StartTime (Get-Date).AddDays(-1) | 
+          Where-Object { 
+              ($_.LocalizedValue -match "Delete" -or $_.LocalizedValue -match "Remove") -and 
+              ($_.ResourceID -match "Microsoft.Web/sites" -or 
+               $_.ResourceID -match "Microsoft.Logic/workflows" -or
+               $_.ResourceID -match "Microsoft.AnalysisServices/servers"-or
+               $_.ResourceID -match "Microsoft.Web/sites/slots"-or
+               $_.ResourceID -match "Microsoft.Web/certificates"-or
+               $_.ResourceID -match "Microsoft.Web/serverfarms"-or
+               $_.ResourceID -match "Microsoft.Network/applicationGateways"-or
+               $_.ResourceID -match "Microsoft.Insights/components"-or
+               $_.ResourceID -match "Microsoft.Automation/automationAccounts"-or
+               $_.ResourceID -match "Microsoft.CognitiveServices/accounts"-or
+               $_.ResourceID -match "Microsoft.Cache/Redis"-or
+               $_.ResourceID -match "Microsoft.DocumentDB/databaseAccounts"-or
+               $_.ResourceID -match "Microsoft.DBforMariaDB/servers"-or
+               $_.ResourceID -match "Microsoft.DBforMySQL/flexibleServers"-or
+               $_.ResourceID -match "Microsoft.DBforMySQL/servers"-or
+               $_.ResourceID -match "Microsoft.DBforPostgreSQL/flexibleServers"-or
+               $_.ResourceID -match "Microsoft.DBforPostgreSQL/servers"-or
+               $_.ResourceID -match "Microsoft.DataMigration/services"-or
+               $_.ResourceID -match "Microsoft.DataMigration/projects"-or
+               $_.ResourceID -match "Microsoft.Databricks/workspaces"-or
+               $_.ResourceID -match "Microsoft.MachineLearningServices/workspaces"-or
+               $_.ResourceID -match "Microsoft.CognitiveServices/accounts"-or
+               $_.ResourceID -match "Microsoft.Insights/workbooks"-or
+               $_.ResourceID -match "Microsoft.CognitiveServices/accounts"-or
+               $_.ResourceID -match "Microsoft.DataFactory/factories"-or
+               $_.ResourceID -match "Microsoft.CognitiveServices/accounts"-or
+               $_.ResourceID -match "Microsoft.Web/sites"-or
+               $_.ResourceID -match "Microsoft.KeyVault/vaults"-or
+               $_.ResourceID -match "Microsoft.NotificationHubs/namespaces"-or
+               $_.ResourceID -match "Microsoft.NotificationHubs/namespaces/notificationHubs"-or
+               $_.ResourceID -match "Microsoft.Network/privateEndpoints"-or
+               $_.ResourceID -match "Microsoft.Automation/automationAccounts/runbooks"-or
+               $_.ResourceID -match "Microsoft.Search/searchServices"-or
+               $_.ResourceID -match "Microsoft.Portal/dashboards"-or
+               $_.ResourceID -match "Microsoft.SignalRService/signalR"-or
+               $_.ResourceID -match "Microsoft.Solutions/applications"-or
+               $_.ResourceID -match "Microsoft.Sql/servers"-or
+               $_.ResourceID -match "Microsoft.Web/staticSites"-or
+               $_.ResourceID -match "Microsoft.Storage/storageAccounts"-or
+               $_.ResourceID -match "Microsoft.CognitiveServices/accounts"-or
+               $_.ResourceID -match "Microsoft.ServiceBus/namespaces"-or
+               $_.ResourceID -match "Microsoft.ContainerRegistry/registries"-or
+               $_.ResourceID -match "Microsoft.RecoveryServices/vaults"-or
+               $_.ResourceID -match "Microsoft.ContainerService/managedClusters"-or
+               $_.ResourceID -match "Microsoft.ContainerInstance/containerGroups"-or
+               $_.ResourceID -match "Microsoft.OperationalInsights/workspaces"-or          
+               $_.ResourceID -match "Microsoft.Web/sites/functions" -or 
+               $_.ResourceID -match "Microsoft.Sql/servers/databases")
+          } | 
+          Select-Object OperationID, SubscriptionID, ResourceID, Caller, EventTimestamp, @{Name="OperationName";Expression={$_.OperationName.LocalizedValue}}
+
+    # Filter by tags
+    $filteredAl = @()
+    foreach ($activity in $al) {
+        $resource = Get-AzResource -ResourceId $activity.ResourceID
+        if (($resource.Tags["managed_by_capmsp"] -eq "yes") -or ($resource.Tags["managed_by_capmsp"] -eq "YES")) {
+            $filteredAl += $activity
+        }
+    }
+
+    $tot = ($filteredAl).Count
+    if ($tot -eq 0) {
+        Write-Host "There are no resources deleted in the last 24 hours SOP"
+    } else {
+        $filteredAl | Export-Csv -Append -Path "$outpath" -NoTypeInformation
+    }
+    $startvalue = $startvalue + $tot
+}
+
+if ($startvalue -gt 0) 
+{
+    exportoutput
+}
